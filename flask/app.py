@@ -41,5 +41,29 @@ def get_employees_route():
     return jsonify(response)
 
 
+def add_employee(tx, name, role, department):
+    query = "MERGE (e:Employee {name:$name, role:$role})" \
+            "MERGE (d:Department {name:$department}) " \
+            "MERGE (e)-[:WORKS_IN]->(d)"
+    tx.run(query, name=name, role=role, department=department)
+
+
+@app.route('/employees', methods=['POST'])
+def add_employee_route():
+    if request.json is None:
+        return jsonify({"error": "Request body is empty"}), 400
+    name = request.json.get("name")
+    role = request.json.get("role")
+    department = request.json.get("department")
+    if name is None or role is None or department is None:
+        return jsonify({"error": "Not all required fields have been provided"}), 400
+    with driver.session() as session:
+        result = session.run("MATCH (e:Employee) WHERE e.name = $name RETURN COUNT(e) as count", name=name).single()
+        if result['count'] > 0:
+            return jsonify({"error": "Employee already exists."}), 400
+        session.write_transaction(add_employee, name, role, department)
+        return jsonify({"message": "Employee added successfully."}), 201
+
+
 if __name__ == '__main__':
     app.run()
