@@ -7,7 +7,7 @@ app = Flask(__name__)
 uri = os.getenv('URI')
 user = os.getenv("USERNAME")
 password = os.getenv("PASSWORD")
-driver = GraphDatabase.driver(uri, auth=(user, password),database="neo4j")
+driver = GraphDatabase.driver(uri, auth=(user, password), database="neo4j")
 
 
 def get_employees(tx, name=None, role=None, sort=None):
@@ -63,6 +63,41 @@ def add_employee_route():
             return jsonify({"error": "Employee already exists."}), 400
         session.write_transaction(add_employee, name, role, department)
         return jsonify({"message": "Employee added successfully."}), 201
+
+
+def update_employee(tx, employee_id, name=None, role=None, department=None):
+    query = "MATCH (e: Employee) WHERE ID(e) = $employee_id"
+    if name is not None or role is not None or department is not None:
+        query += " SET "
+        updates = []
+        if name is not None:
+            updates.append("e.name = $name")
+        if role is not None:
+            updates.append("e.role = $role")
+        if department is not None:
+            updates.append("e.department = $department")
+        query += ", ".join(updates)
+    result = tx.run(query, employee_id=employee_id, name=name, role=role, department=department)
+    if result.consume().counters.nodes_created > 0:
+        return {"error": "Employee not found"}
+    return {"message": "Employee updated successfully"}
+
+
+@app.route('/employees/<int:id>', methods=['PUT'])
+def update_employee_route(id):
+    print(id)
+    name = request.json.get('name')
+    role = request.json.get('role')
+    department = request.json.get('department')
+    with driver.session() as session:
+        res = session.run("MATCH (e:Employee) MATCH (e) WHERE ID(e) = $id RETURN e",
+                          id=id).single()
+        if res is None:
+            return jsonify({"error": "Employee not found."}), 400
+        result = session.write_transaction(update_employee, id, name, role, department)
+        if "error" in result:
+            return jsonify(result), 404
+        return jsonify(result), 200
 
 
 if __name__ == '__main__':
