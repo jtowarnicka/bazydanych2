@@ -85,7 +85,6 @@ def update_employee(tx, employee_id, name=None, role=None, department=None):
 
 @app.route('/employees/<int:id>', methods=['PUT'])
 def update_employee_route(id):
-    print(id)
     name = request.json.get('name')
     role = request.json.get('role')
     department = request.json.get('department')
@@ -102,7 +101,6 @@ def update_employee_route(id):
 
 def delete_employee(tx, id, department_name=None):
     if department_name is not None:
-        print('tu nie dziala')
         query = "MATCH (e: Employee)-[r:MANAGES]->(d:Department)" \
                 "WHERE ID(e) = $id " \
                 "DETACH DELETE e, d"
@@ -127,6 +125,83 @@ def delete_employee_route(id):
             print(department_name)
             session.write_transaction(delete_employee, id, department_name)
             return jsonify({"message": f"Employee and its department {department_name} deleted successfully."}), 200
+
+
+@app.route('/employees/<int:id>/subordinates', methods=['GET'])
+def get_subordinates(id):
+    with driver.session() as session:
+        result = session.run("MATCH (m:Employee)-[r:MANAGES]->(d:Department) WHERE ID(m) = $id "
+                             "RETURN d.name as department_name", id=id).single()
+        if not result:
+            return jsonify({"error": "Employee not found or has no department to manage"}), 404
+        department_name = result["department_name"]
+        query = "MATCH (e:Employee)-[r:WORKS_IN]->(d:Department) " \
+                "WHERE d.name = $department_name RETURN e.name as name"
+        results = session.run(query, department_name=department_name).data()
+        subordinates = [{"name": result["name"]} for result in results]
+        return jsonify(subordinates), 200
+
+
+@app.route('/employees/<int:id>', methods=['GET'])
+def get_employee_info(id):
+    with driver.session() as session:
+        query = "MATCH (e:Employee)-[r:WORKS_IN]->(d:Department)<-[:MANAGES]-(m:Employee)," \
+                "(em:Employee)-[rel:WORKS_IN]->(d)" \
+                "WHERE ID(e) = $id " \
+                "RETURN d.name as department_name, m.name as manager," \
+                " count(rel) as number_of_employees"
+        result = session.run(query, id=id).single()
+        if not result:
+            return jsonify({"error": "Employee not found or has no department"}), 404
+        department_name = result["department_name"]
+        manager = result["manager"]
+        number_of_employees = result["number_of_employees"]
+        return jsonify({"department_name": department_name, "manager": manager, "number_of_employees": number_of_employees}), 200
+
+
+def get_departments(tx, name=None, sort=None):
+    query = "MATCH (e:Employee)-[r]->(d:Department)"
+    conditions = []
+    if name is not None:
+        conditions.append("toLower(d.name) CONTAINS toLower($name)")
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " RETURN d.name as name, count(r) as number_of_employees"
+    if sort == "name_asc":
+        query += " ORDER BY d.name"
+    elif sort == "name_desc":
+        query += " ORDER BY d.name DESC"
+    elif sort == "e_asc":
+        query += " ORDER BY number_of_employees"
+    elif sort == "e_desc":
+        query += " ORDER BY number_of_employees DESC"
+    results = tx.run(query, name=name).data()
+    departments = [{"name": result['name'], "number_of_employees": result['number_of_employees']} for result in results]
+    return departments
+
+
+@app.route('/departments', methods=['GET'])
+def get_departments_route():
+    name = request.args.get('name')
+    sort = request.args.get('sort')
+
+    with driver.session() as session:
+        departments = session.read_transaction(get_departments, name, sort)
+        return jsonify(departments), 200
+
+
+def get_employees_by_department(tx, id):
+    query = "MATCH (e:Employee)-[:WORKS_IN]->(d:Department) WHERE ID(d) = $id RETURN e"
+    results = tx.run(query, id=id).data()
+    employees = [{"name": result['e']['name'], "role": result['e']['role']} for result in results]
+    return employees
+
+
+@app.route('/departments/<int:id>/employees', methods=['GET'])
+def get_department_employees(id):
+    with driver.session() as session:
+        employees = session.read_transaction(get_employees_by_department, id)
+        return jsonify(employees), 200
 
 
 if __name__ == '__main__':
