@@ -167,7 +167,7 @@ def get_departments(tx, name=None, sort=None):
         conditions.append("toLower(d.name) CONTAINS toLower($name)")
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-    query += " RETURN d.name as name, count(r) as number_of_employees"
+    query += " RETURN d.name as name, count(r) as number_of_employees,  ID(d) as id"
     if sort == "name_asc":
         query += " ORDER BY d.name"
     elif sort == "name_desc":
@@ -177,7 +177,7 @@ def get_departments(tx, name=None, sort=None):
     elif sort == "e_desc":
         query += " ORDER BY number_of_employees DESC"
     results = tx.run(query, name=name).data()
-    departments = [{"name": result['name'], "number_of_employees": result['number_of_employees']} for result in results]
+    departments = [{"name": result['name'], "number_of_employees": result['number_of_employees'], "id": result['id']} for result in results]
     return departments
 
 
