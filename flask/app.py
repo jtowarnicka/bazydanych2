@@ -19,14 +19,14 @@ def get_employees(tx, name=None, role=None, sort=None):
         conditions.append("toLower(e.role) CONTAINS toLower($role)")
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-    query += " RETURN e"
+    query += " RETURN e, ID(e) as id"
     if sort == "name_asc":
         query += " ORDER BY e.name"
     elif sort == "name_desc":
         query += " ORDER BY e.name DESC"
     results = tx.run(query, name=name, role=role).data()
     employees = [{"name": result['e']['name'],
-                  "role": result['e']['role']} for result in results]
+                  "role": result['e']['role'], "id": result['id']} for result in results]
     return employees
 
 
@@ -98,6 +98,35 @@ def update_employee_route(id):
         if "error" in result:
             return jsonify(result), 404
         return jsonify(result), 200
+
+
+def delete_employee(tx, id, department_name=None):
+    if department_name is not None:
+        print('tu nie dziala')
+        query = "MATCH (e: Employee)-[r:MANAGES]->(d:Department)" \
+                "WHERE ID(e) = $id " \
+                "DETACH DELETE e, d"
+    else:
+        query = "MATCH (e: Employee) WHERE ID(e) = $id DETACH DELETE e"
+    tx.run(query, id=id, department_name=department_name)
+
+
+@app.route('/employees/<int:id>', methods=['DELETE'])
+def delete_employee_route(id):
+    with driver.session() as session:
+        result = session.run("MATCH (e:Employee) WHERE ID(e) = $id RETURN COUNT(e) as count", id=id).single()
+        if result["count"] == 0:
+            return jsonify({"error": "Employee not found."}), 404
+        result = session.run("MATCH (e:Employee)-[r:MANAGES]->(d:Department)"
+                             " WHERE ID(e) = $id RETURN d.name", id=id).single()
+        if result is None:
+            session.write_transaction(delete_employee, id)
+            return jsonify({"message": "Employee deleted successfully"}), 200
+        else:
+            department_name = result["d.name"]
+            print(department_name)
+            session.write_transaction(delete_employee, id, department_name)
+            return jsonify({"message": f"Employee and its department {department_name} deleted successfully."}), 200
 
 
 if __name__ == '__main__':
