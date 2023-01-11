@@ -156,7 +156,8 @@ def get_employee_info(id):
         department_name = result["department_name"]
         manager = result["manager"]
         number_of_employees = result["number_of_employees"]
-        return jsonify({"department_name": department_name, "manager": manager, "number_of_employees": number_of_employees}), 200
+        return jsonify({"department_name": department_name, "manager": manager,
+                        "number_of_employees": number_of_employees}), 200
 
 
 def get_departments(tx, name=None, sort=None):
