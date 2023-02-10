@@ -1,5 +1,7 @@
-<sub>neo4j
-zadanie ze stepika</sup>
-
 ### Dzień dobry
 
+- docker run \ --name testneo4j \ -p7474:7474 -p7687:7687 \ -d \ -v $HOME/neo4j/data:/data \ -v $HOME/neo4j/logs:/logs \ -v $HOME/neo4j/import:/var/lib/neo4j/import \ -v $HOME/neo4j/plugins:/plugins \ --env NEO4J_AUTH=neo4j/test1234 \ neo4j:latest
+- pip install -r requirements.txt
+- ~~.env~~: USERNAME="neo4j"
+PASSWORD="test1234"
+URI="bolt://localhost:7687"
